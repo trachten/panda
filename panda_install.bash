@@ -1,10 +1,18 @@
 #!/bin/bash
 
+#
+# This is just everything in compile.md
+# turned into a script
+# you should be able to run it, type in
+# sudo passwd and have it install all of panda.
+# Verified that this script works
+# from a clean install of deb7.
+
 sudo apt-get -y install build-essential 
 sudo apt-get -y build-dep qemu
 sudo apt-get -y install nasm
 sudo apt-get -y install libssl-dev
-sudo apt-get -y install libpacap-dev
+sudo apt-get -y install libpcap-dev
 sudo apt-get -y install subversion
 sudo apt-get -y install curl
 sudo apt-get -y install autoconf
@@ -12,7 +20,9 @@ sudo apt-get -y install libtool
 
 
 
-cd ~/git/panda/git
+mkdir -p ~/git
+
+cd ~/git
 git clone https://github.com/moyix/panda.git
 
 cd ~/git/panda
@@ -47,6 +57,11 @@ sh ./autogen.sh
 ./configure --disable-shared
 make
 sudo make install
+
+cd ~/software
+git clone https://github.com/eliben/pycparser.git
+cd pycparser
+sudo python setup.py install
 
 cd ~/git/panda/qemu
 sh ./build.sh
