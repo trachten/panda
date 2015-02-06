@@ -108,6 +108,19 @@ make
 make install
 ```
 
+### Pycparser needed too
+
+In order to autogenerate code with ppp (plugin-plugin APIs), we need
+a python c parser.  Otherwise, parsing function prototypes that can
+have function pointers as args is a horrifying mess. 
+
+```
+cd ~/software
+git clone https://github.com/eliben/pycparser.git
+cd pycparser
+sudo python setup.py install
+```
+
 ## Building the QEMU part
 After successfully installing all the prerequisites, you can go
 on and build the QEMU part of PANDA.
