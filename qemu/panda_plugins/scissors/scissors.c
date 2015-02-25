@@ -1,9 +1,8 @@
 /* Scissors plugin for making smaller replays.
  *
- * Use -panda-arg scissors:start and -panda-arg scissors:end
- * to control beginning and end of new replay. Output goes to
- * a new replay named "scissors" by default (-panda-arg scissors:name
- * to change)
+ * Use -panda "scissors:start=foo,end=bar" to control beginning and 
+ * end of new replay. Output goes to a new replay named "scissors" 
+ * by default (-panda "scissors:name=baz" to to change)
  */
 
 #include <stdio.h>
