@@ -23,6 +23,10 @@ extern "C" {
 
 }
 
+#include <vector>
+
+ 
+double prob_label_u32;
 const char *taint_filename = 0;
 bool positional_labels = true;
 bool use_taint2 = true;
@@ -32,6 +36,7 @@ bool no_taint = true;
 bool saw_open = false;
 uint32_t the_asid;
 uint32_t the_fd;
+
 
 
 #ifdef TARGET_I386
@@ -92,11 +97,21 @@ void read_enter(CPUState* env,target_ulong pc,uint32_t fd,target_ulong buf,uint3
 
 uint32_t taint_label_number_start = 0;
 
+float pdice(float m) {
+    float x = ((float)(rand())) / RAND_MAX;
+    return (x<m);
+}
+    
+
+
+
+
+
+
+
 // 3 long sys_read(unsigned int fd, char __user *buf, size_t count);
 // typedef void (*on_sys_read_return_t)(CPUState* env,target_ulong pc,uint32_t fd,target_ulong buf,uint32_t count);
 void read_return(CPUState* env,target_ulong pc,uint32_t fd,target_ulong buf,uint32_t count) { 
-
-    
     if (saw_read && panda_current_asid(env) == the_asid) {
         count = EAX;
         printf ("count=%d\n", count);
@@ -105,35 +120,45 @@ void read_return(CPUState* env,target_ulong pc,uint32_t fd,target_ulong buf,uint
         printf ("*** applying %s taint labels %d..%d to buffer\n",
                 positional_labels ? "positional" : "uniform",
                 taint_label_number_start, taint_label_number_start + count - 1);
-        for (uint32_t i=0; i<count; i++ ) {
-            target_phys_addr_t pa = panda_virt_to_phys(env, the_buf+i);
-            if (pandalog) {
-                Panda__LogEntry ple = PANDA__LOG_ENTRY__INIT;
-                ple.has_taint_label_virtual_addr = 1;
-                ple.has_taint_label_physical_addr = 1;
-                ple.has_taint_label_number = 1;
-                ple.taint_label_virtual_addr = the_buf + i;
-                ple.taint_label_physical_addr = pa;
-                if (positional_labels) {
-                    ple.taint_label_number = taint_label_number_start + i;
-                }
-                else {
-                    ple.taint_label_number = 1;
-                }
-                pandalog_write_entry(&ple);           
-            }
-            if (!no_taint) {
-                if (positional_labels) {
-                    if (use_taint2) 
-                        taint2_label_ram(pa, taint_label_number_start + i);
-                    else 
-                        taint_label_ram(pa, i);
-                }
-                else {
-                    if (use_taint2) 
-                        taint2_label_ram(pa, 1);
-                    else 
-                        taint_label_ram(pa, 1);
+        // iterate over uint32 blobs
+
+        for (uint32_t i=0; i<count/4; i++) {
+            if (pdice(prob_label_u32)) {
+                uint32_t label_num = taint_label_number_start + i*4;
+                printf ("labeling uint32 %d..%d\n", i*4, i*4+3);
+                // we will label this uint32
+                for (uint32_t j=0; j<4; j++) {
+                    uint32_t offset = i*4 + j;
+                    target_phys_addr_t pa = panda_virt_to_phys(env, the_buf + offset);
+                    if (pandalog) {
+                        Panda__LogEntry ple = PANDA__LOG_ENTRY__INIT;
+                        ple.has_taint_label_virtual_addr = 1;
+                        ple.has_taint_label_physical_addr = 1;
+                        ple.has_taint_label_number = 1;
+                        ple.taint_label_virtual_addr = the_buf + offset;
+                        ple.taint_label_physical_addr = pa;
+                        if (positional_labels) {
+                            ple.taint_label_number = label_num;
+                        }
+                        else {
+                            ple.taint_label_number = 1;
+                        }
+                        pandalog_write_entry(&ple);           
+                    }
+                    if (!no_taint) {
+                        if (positional_labels) {
+                            if (use_taint2) 
+                                taint2_label_ram(pa, label_num);
+                            else 
+                                taint_label_ram(pa, i*4);
+                        }
+                        else {
+                            if (use_taint2) 
+                                taint2_label_ram(pa, 1);
+                            else 
+                                taint_label_ram(pa, 1);
+                        }
+                    }
                 }
             }
         }
@@ -141,6 +166,8 @@ void read_return(CPUState* env,target_ulong pc,uint32_t fd,target_ulong buf,uint
         printf (" ... done applying labels\n");
         saw_read = false;
     }
+
+
 }
 #endif
 
@@ -155,6 +182,7 @@ bool init_plugin(void *self) {
     use_taint2 = !panda_parse_bool(args, "taint1");
     // used to just find the names of files that get 
     no_taint = panda_parse_bool(args, "notaint");
+    prob_label_u32 = panda_parse_double(args, "prob_label_u32", 1.0);
 
     printf ("taint_filename = [%s]\n", taint_filename);
     printf ("positional_labels = %d\n", positional_labels);
@@ -186,6 +214,7 @@ bool init_plugin(void *self) {
 #endif
     return true;
 }
+
 
 
 void uninit_plugin(void *self) {

@@ -116,6 +116,14 @@ void dd_spit(){
     std::map < uint32_t, float > dead_data;
     float  denom = last_tainted_branch - first_tainted_branch;
 
+    uint32_t *al = taint2_labels_applied();
+    uint32_t n = taint2_num_labels_applied();
+    for (uint32_t i=0; i<n; i++) {
+        uint32_t l = al[i];
+        dead_data[l] = 0;
+    }    
+    free(al);
+
     for ( auto &kvp : dde ) {
         uint32_t l = kvp.first;
         for ( auto &ins : kvp.second ) {
@@ -177,7 +185,7 @@ uint64_t ii = 0;
 int dead_data_after_block_exec(CPUState *env, TranslationBlock *tb, TranslationBlock *next_tb) {
 
     ii ++;
-    if ((ii % 1000) == 0) {
+    if ((ii % 10000) == 0) {
         dd_spit();
     }
 
