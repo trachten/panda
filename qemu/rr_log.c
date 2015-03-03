@@ -1294,6 +1294,9 @@ void rr_destroy_log(void) {
   rr_nondet_log = NULL;
 }
 
+struct timeval replay_start_time;
+
+
 //mz display a measure of replay progress (using instruction counts and log size)
 void replay_progress(void) {
   if (rr_nondet_log) {
@@ -1301,7 +1304,12 @@ void replay_progress(void) {
       printf ("%s:  log is empty.\n", rr_nondet_log->name);
     }
     else {
-      printf ("%s:  %ld of %llu (%.2f%%) bytes, %llu of %llu (%.2f%%) instructions processed.\n", 
+        struct timeval time;
+        gettimeofday(&time, 0);
+        float secs = ((float) ((time.tv_sec-replay_start_time.tv_sec)*1000000LL + time.tv_usec-replay_start_time.tv_usec)) / 1000000.0;
+
+
+      printf ("%s:  %ld of %llu (%.2f%%) bytes, %llu of %llu (%.2f%%) instructions processed. %.2f sec\n", 
               rr_nondet_log->name,
               ftell(rr_nondet_log->fp),
               rr_nondet_log->size,
@@ -1309,9 +1317,10 @@ void replay_progress(void) {
               (unsigned long long)rr_queue_head->header.prog_point.guest_instr_count,
               (unsigned long long)rr_nondet_log->last_prog_point.guest_instr_count,
               ((rr_queue_head->header.prog_point.guest_instr_count * 100.0) / 
-                    rr_nondet_log->last_prog_point.guest_instr_count)
-      );
-    }
+               rr_nondet_log->last_prog_point.guest_instr_count),
+              secs
+          );
+     }
   }
 }
 
@@ -1385,6 +1394,7 @@ void qmp_begin_record_from(const char *snapshot, const char *file_name, Error **
 void qmp_begin_replay(const char *file_name, Error **errp) {
   rr_replay_requested = 1;
   rr_requested_name = g_strdup(file_name);
+  gettimeofday(&replay_start_time, 0);
 }
 
 
