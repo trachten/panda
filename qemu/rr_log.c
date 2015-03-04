@@ -1529,6 +1529,9 @@ void rr_do_end_record(void) {
 #endif
 }
 
+extern void panda_cleanup(void);
+
+
 // file_name_full should be full path to the record/replay log
 int rr_do_begin_replay(const char *file_name_full, void *cpu_state) {
 #ifdef CONFIG_SOFTMMU
@@ -1660,6 +1663,7 @@ void rr_do_end_replay(int is_error) {
 
     //mz XXX something more graceful?
     if (is_error) {
+        panda_cleanup();
         abort();
     }
     else {
