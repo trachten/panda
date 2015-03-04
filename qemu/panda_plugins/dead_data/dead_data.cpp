@@ -100,7 +100,7 @@ bool first_time = true;
 const char *dead_data_filename;
 
 void dd_spit(){
-    //printf ("computing dead data and writing to file [%s]\n", dead_data_filename);
+    printf ("computing dead data and writing to file [%s]\n", dead_data_filename);
     FILE *fp;
     if (first_time) {
         first_time = false;
@@ -186,7 +186,7 @@ int dead_data_after_block_exec(CPUState *env, TranslationBlock *tb, TranslationB
 
     ii ++;
     if ((ii % 10000) == 0) {
-        dd_spit();
+        //        dd_spit();
     }
 
     if ((use_taint2 && taint2_enabled()) || (!use_taint2 && taint_enabled())) {
