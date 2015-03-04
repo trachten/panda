@@ -26,7 +26,7 @@ extern "C" {
 #include <vector>
 
  
-double prob_label_u32;
+double prob_label_u32 = 0;
 const char *taint_filename = 0;
 bool positional_labels = true;
 bool use_taint2 = true;
@@ -106,6 +106,38 @@ float pdice(float m) {
 
 
 
+void label_byte(CPUState *env, target_ulong virt_addr, uint32_t label_num) {
+    target_phys_addr_t pa = panda_virt_to_phys(env, virt_addr);
+    if (pandalog) {
+        Panda__LogEntry ple = PANDA__LOG_ENTRY__INIT;
+        ple.has_taint_label_virtual_addr = 1;
+        ple.has_taint_label_physical_addr = 1;
+        ple.has_taint_label_number = 1;
+        ple.taint_label_virtual_addr = virt_addr;
+        ple.taint_label_physical_addr = pa;
+        if (positional_labels) {
+            ple.taint_label_number = label_num;
+        }
+        else {
+            ple.taint_label_number = 1;
+        }
+        pandalog_write_entry(&ple);           
+    }
+    if (!no_taint) {
+        if (positional_labels) {
+            if (use_taint2) 
+                taint2_label_ram(pa, label_num);
+            else 
+                taint_label_ram(pa, label_num);
+        }
+        else {
+            if (use_taint2) 
+                taint2_label_ram(pa, 1);
+            else 
+                taint_label_ram(pa, 1);
+        }
+    }
+}
 
 
 
@@ -120,44 +152,22 @@ void read_return(CPUState* env,target_ulong pc,uint32_t fd,target_ulong buf,uint
         printf ("*** applying %s taint labels %d..%d to buffer\n",
                 positional_labels ? "positional" : "uniform",
                 taint_label_number_start, taint_label_number_start + count - 1);
-        // iterate over uint32 blobs
-
-        for (uint32_t i=0; i<count/4; i++) {
-            if (pdice(prob_label_u32)) {
-                uint32_t label_num = taint_label_number_start + i*4;
-                printf ("labeling uint32 %d..%d\n", i*4, i*4+3);
-                // we will label this uint32
-                for (uint32_t j=0; j<4; j++) {
-                    uint32_t offset = i*4 + j;
-                    target_phys_addr_t pa = panda_virt_to_phys(env, the_buf + offset);
-                    if (pandalog) {
-                        Panda__LogEntry ple = PANDA__LOG_ENTRY__INIT;
-                        ple.has_taint_label_virtual_addr = 1;
-                        ple.has_taint_label_physical_addr = 1;
-                        ple.has_taint_label_number = 1;
-                        ple.taint_label_virtual_addr = the_buf + offset;
-                        ple.taint_label_physical_addr = pa;
-                        if (positional_labels) {
-                            ple.taint_label_number = label_num;
-                        }
-                        else {
-                            ple.taint_label_number = 1;
-                        }
-                        pandalog_write_entry(&ple);           
-                    }
-                    if (!no_taint) {
-                        if (positional_labels) {
-                            if (use_taint2) 
-                                taint2_label_ram(pa, label_num);
-                            else 
-                                taint_label_ram(pa, i*4);
-                        }
-                        else {
-                            if (use_taint2) 
-                                taint2_label_ram(pa, 1);
-                            else 
-                                taint_label_ram(pa, 1);
-                        }
+        if (prob_label_u32 == 0) {
+            for (uint32_t i=0; i<count; i++) {
+                printf ("labeling virt addr 0x%x with label %d\n", the_buf+i, taint_label_number_start + i);
+                label_byte(env, the_buf+i, taint_label_number_start + i);
+            }
+        }
+        else {
+            // iterate over uint32 blobs
+            for (uint32_t i=0; i<count/4; i++) {
+                if (pdice(prob_label_u32)) {
+                    uint32_t label_num = taint_label_number_start + i*4;
+                    printf ("labeling uint32 %d..%d\n", i*4, i*4+3);
+                    // we will label this uint32
+                    for (uint32_t j=0; j<4; j++) {
+                        uint32_t offset = i*4 + j;
+                        label_byte(env, the_buf + offset, label_num);
                     }
                 }
             }
