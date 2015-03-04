@@ -79,6 +79,11 @@ std::map<uint32_t, LabelSetP> int_to_lsp;
 
 // keep only one copy of a set
 // referenced by an integer
+
+
+uint64_t num_hits = 0;
+uint64_t num_misses = 0;
+
 uint32_t register_set( LabelSetP lsp, std::set<uint32_t> s ) {
     uint32_t i;
 
@@ -91,6 +96,13 @@ uint32_t register_set( LabelSetP lsp, std::set<uint32_t> s ) {
         int_to_set[i] = s;
         printf ("i=%d\n", i);
 
+        printf ("%d in set_to_int \n", (int) set_to_int.size());
+        printf ("%d in int_to_set \n", (int) int_to_set.size());
+        printf ("%d in lsp_to_int \n", (int) lsp_to_int.size());
+        printf ("%d in int_to_lsp \n", (int) int_to_lsp.size());
+
+        printf ("%.5f hit rate\n", ((float) num_hits) / (num_hits + num_misses));
+
     }
     else {
         i = set_to_int[s];
@@ -99,6 +111,8 @@ uint32_t register_set( LabelSetP lsp, std::set<uint32_t> s ) {
     // also keep track of mapping from label-set-pointer to set_index and back.
     lsp_to_int[lsp] = i;
     int_to_lsp[i] = lsp;
+
+        
 
     return i;
 }
@@ -131,13 +145,23 @@ LabelSetP label_set_union(LabelSetP ls1, LabelSetP ls2) {
 
         std::pair<LabelSetP, LabelSetP> minmax(min, max);
 
-        auto it = memoized_unions.find(minmax);
+         auto it = memoized_unions.find(minmax);
         if (it != memoized_unions.end()) {
             //qemu_log_mask(CPU_LOG_TAINT_OPS, "  FOUND\n");
+            num_hits ++ ;
             return it->second;
         }
+        num_misses ++ ;
+
+        if (((num_hits + num_misses) % 10000) == 0) {
+            printf ("h=%" PRIu64 " m=%" PRIu64 " \n", num_hits, num_misses);
+        }
+
+
         //qemu_log_mask(CPU_LOG_TAINT_OPS, "  NOT FOUND\n");
 
+
+        printf ("min=0x%lx max=0x%lx is not found\n", (uint64_t) min, (uint64_t) max);
 
         // we have a new minmax (pair of two sets we are supposed to union)
         // get rendered versions of both min and max, then compute
@@ -182,11 +206,12 @@ LabelSetP label_set_union(LabelSetP ls1, LabelSetP ls2) {
             // no -- so just return a LabelSetP that already points to that rendered set
             uint32_t result_i =  set_to_int[result_set];
             LabelSetP result = int_to_lsp[result_i];
+            memoized_unions.insert(std::make_pair(minmax, result));
             return result;
         }
-
         // okay, yes, result really is a new set.  we need to allocate a new label set 
         // and record the pair, as well as register the rendered set.
+
 
         LabelSetP result = LSA.alloc();
         //labelset_count++;
