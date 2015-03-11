@@ -37,6 +37,7 @@ bool saw_open = false;
 uint32_t the_asid;
 uint32_t the_fd;
 
+uint32_t max_num_labels = 1000000;
 
 
 #ifdef TARGET_I386
@@ -141,6 +142,8 @@ void label_byte(CPUState *env, target_ulong virt_addr, uint32_t label_num) {
 
 
 
+uint32_t bytes_labeled = 0;
+
 // 3 long sys_read(unsigned int fd, char __user *buf, size_t count);
 // typedef void (*on_sys_read_return_t)(CPUState* env,target_ulong pc,uint32_t fd,target_ulong buf,uint32_t count);
 void read_return(CPUState* env,target_ulong pc,uint32_t fd,target_ulong buf,uint32_t count) { 
@@ -152,10 +155,14 @@ void read_return(CPUState* env,target_ulong pc,uint32_t fd,target_ulong buf,uint
         printf ("*** applying %s taint labels %d..%d to buffer\n",
                 positional_labels ? "positional" : "uniform",
                 taint_label_number_start, taint_label_number_start + count - 1);
-        if (prob_label_u32 == 0) {
+        if (prob_label_u32 == 0 && bytes_labeled < 5000) {
             for (uint32_t i=0; i<count; i++) {
                 printf ("labeling virt addr 0x%x with label %d\n", the_buf+i, taint_label_number_start + i);
                 label_byte(env, the_buf+i, taint_label_number_start + i);
+                bytes_labeled ++;
+                if (bytes_labeled > max_num_labels) {
+                    break;
+                }
             }
         }
         else {
@@ -192,11 +199,15 @@ bool init_plugin(void *self) {
     use_taint2 = !panda_parse_bool(args, "taint1");
     // used to just find the names of files that get 
     no_taint = panda_parse_bool(args, "notaint");
-    prob_label_u32 = panda_parse_double(args, "prob_label_u32", 1.0);
+    prob_label_u32 = panda_parse_double(args, "prob_label_u32", 0.0);
+    max_num_labels = panda_parse_ulong(args, "max_num_labels", 1000000);
 
     printf ("taint_filename = [%s]\n", taint_filename);
     printf ("positional_labels = %d\n", positional_labels);
-
+    printf ("use_taint2 = %d\n", use_taint2);
+    printf ("no_taint = %d\n", no_taint);
+    printf ("prob_label_u32 = %.3f\n", prob_label_u32);
+    printf ("max_num_labels = %d\n", max_num_labels);
 
     panda_require("syscalls2");
 
