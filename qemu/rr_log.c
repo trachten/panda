@@ -1296,6 +1296,26 @@ void rr_destroy_log(void) {
 
 struct timeval replay_start_time;
 
+void self_mem(void);
+
+// spit out memory consumption via proc
+void self_mem(void) {
+    FILE* status = fopen( "/proc/self/status", "r" );
+    size_t n = 1024;
+    char *buf = (char *) malloc(n);
+    while (1) {
+        n = getline(&buf, &n, status); 
+        if (n == -1) {
+            break;
+        }
+        // check for "Vm.." in beginning
+        if ((buf[0] == 'V') && (buf[1] == 'm')) {
+            printf ("process mem info: %s", buf);
+        }
+    }
+    fclose(status);
+}
+
 
 //mz display a measure of replay progress (using instruction counts and log size)
 void replay_progress(void) {
@@ -1307,9 +1327,7 @@ void replay_progress(void) {
         struct timeval time;
         gettimeofday(&time, 0);
         float secs = ((float) ((time.tv_sec-replay_start_time.tv_sec)*1000000LL + time.tv_usec-replay_start_time.tv_usec)) / 1000000.0;
-
-
-      printf ("%s:  %ld of %llu (%.2f%%) bytes, %llu of %llu (%.2f%%) instructions processed. %.2f sec\n", 
+        printf ("%s:  %ld of %llu (%.2f%%) bytes, %llu of %llu (%.2f%%) instructions processed. %.2f sec\n", 
               rr_nondet_log->name,
               ftell(rr_nondet_log->fp),
               rr_nondet_log->size,
@@ -1320,6 +1338,7 @@ void replay_progress(void) {
                rr_nondet_log->last_prog_point.guest_instr_count),
               secs
           );
+        self_mem();
      }
   }
 }
