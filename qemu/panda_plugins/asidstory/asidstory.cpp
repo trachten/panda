@@ -55,6 +55,7 @@ extern "C" {
 #include "rr_log_all.h"  
 #include "../osi/osi_types.h"
 #include "../osi/osi_ext.h"
+#include "../osi/os_intro.h"
 #include "panda_plugin_plugin.h"
     
     bool init_plugin(void *);
@@ -309,7 +310,15 @@ int asidstory_after_block_exec(CPUState *env, TranslationBlock *tb, TranslationB
 }
 
 
+// this function will be called when a new process is created by the os
+void asidstory_on_process_start(CPUState *env, target_ulong pc, OsiProc *proc) {
+    printf ("process start name=[%s] pid=%d \n", proc->name, (int) proc->pid);
+}
 
+// and this one will be called when a process is terminated
+void asidstory_on_process_end(CPUState *env, target_ulong pc, OsiProc *proc) {
+    printf ("process end name=[%s] pid=%d \n", proc->name, (int) proc->pid);    
+}
     
 
 
@@ -318,7 +327,7 @@ bool init_plugin(void *self) {
     printf ("Initializing plugin asidstory\n");
 
     panda_require("osi");
-   
+    
     // this sets up OS introspection API
     bool x = init_osi_api();  
     assert (x==true);
@@ -333,6 +342,10 @@ bool init_plugin(void *self) {
     panda_arg_list *args = panda_get_args("asidstory");
     vol_instr_count = panda_parse_uint64(args, "vol_instr_count", 0);
     vol_cmds = panda_parse_string(args, "vol_cmds", "xxx");
+    
+    // register the new / term process callbacks with osi
+    PPP_REG_CB("osi", on_process_start, asidstory_on_process_start);
+    PPP_REG_CB("osi", on_process_end, asidstory_on_process_end);
     
     min_instr = 0;   
     return true;

@@ -1,6 +1,8 @@
 #ifndef __OSI_INT_FNS_H__
 #define __OSI_INT_FNS_H__
 
+#include <stdint.h>
+
 // returns operating system introspection info for each process in an array
 OsiProcs *get_processes(CPUState *env);
 
@@ -18,5 +20,6 @@ OsiModules *get_libraries(CPUState *env, OsiProc *p);
 void free_osiproc(OsiProc *p);
 void free_osiprocs(OsiProcs *ps);
 void free_osimodules(OsiModules *ms);
+
 
 #endif

@@ -29,6 +29,10 @@ extern "C" {
 #include "../osi/osi_types.h"
 #include "../osi/os_intro.h"
 
+#include "../syscalls2/gen_syscalls_ext_typedefs_windows7_x86.h"
+
+#include "win7x86intro.h"
+
 bool init_plugin(void *);
 void uninit_plugin(void *);
 void on_get_current_process(CPUState *env, OsiProc **out_p);
@@ -38,7 +42,17 @@ void on_free_osiproc(OsiProc *p);
 void on_free_osiprocs(OsiProcs *ps);
 void on_free_osimodules(OsiModules *ms);
 
+
 }
+
+PPP_PROT_REG_CB(on_win7x86_process_start)
+PPP_PROT_REG_CB(on_win7x86_process_end)
+
+PPP_CB_BOILERPLATE(on_win7x86_process_start)
+PPP_CB_BOILERPLATE(on_win7x86_process_end)
+
+
+#include "panda_plugin_plugin.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,6 +85,7 @@ void on_free_osimodules(OsiModules *ms);
 // Size of a guest pointer. Note that this can't just be target_ulong since
 // a 32-bit OS will run on x86_64-softmmu
 #define PTR uint32_t
+
 
 static inline char * make_pagedstr() {
     char *m = (char *)malloc(8);
@@ -354,6 +369,47 @@ void on_free_osimodules(OsiModules *ms) {
     free(ms);
 }
 
+
+
+// called on *returning* from NtCreateUserProcess
+void on_nt_create_process (
+    CPUState* env,target_ulong pc,
+    uint32_t ProcessHandle,
+    uint32_t ThreadHandle,
+    uint32_t ProcessDesiredAccess,
+    uint32_t ThreadDesiredAccess,
+    uint32_t ProcessObjectAttributes,
+    uint32_t ThreadObjectAttributes,
+    uint32_t ProcessFlags,
+    uint32_t ThreadFlags,
+    uint32_t ProcessParameters,
+    uint32_t CreateInfo,
+    uint32_t AttributeList) {
+
+    OsiProc *proc = (OsiProc *) calloc (1, sizeof(OsiProc));
+    proc->name = (char *) "foo" ;
+    proc->pid = 123 ;
+    // call the fn registered via osi that we want to run when a process is created
+    PPP_RUN_CB(on_win7x86_process_start, env, (uint64_t) pc, proc);
+    free(proc);
+}
+
+// called on *entering* NtTerminateProcess
+void on_nt_terminate_process (
+    CPUState* env,
+    target_ulong pc,
+    uint32_t ProcessHandle,
+    uint32_t ExitStatus) {
+    
+    OsiProc *proc = (OsiProc *) calloc (1, sizeof(OsiProc));
+    proc->name = (char *) "foo" ;
+    proc->pid = 123 ;
+    // call the fn registered via osi that we want to run when a process is created
+    PPP_RUN_CB(on_win7x86_process_end, env, (uint64_t)  pc, proc);
+    free(proc);
+}
+
+
 #endif
 
 bool init_plugin(void *self) {
@@ -364,6 +420,8 @@ bool init_plugin(void *self) {
     PPP_REG_CB("osi", on_free_osiproc, on_free_osiproc);
     PPP_REG_CB("osi", on_free_osiprocs, on_free_osiprocs);
     PPP_REG_CB("osi", on_free_osimodules, on_free_osimodules);
+    PPP_REG_CB("syscalls2", on_NtCreateUserProcess_return, on_nt_create_process);
+    PPP_REG_CB("syscalls2", on_NtTerminateProcess_enter, on_nt_terminate_process);
 #endif
     return true;
 }

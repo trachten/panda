@@ -25,6 +25,10 @@ PANDAENDCOMMENT */
 #include "osi_int_fns.h"
 #include "os_intro.h"
 
+#include "../win7x86intro/win7x86intro.h"
+
+//#include "osi.h"
+
 bool init_plugin(void *);
 void uninit_plugin(void *);
 
@@ -35,6 +39,8 @@ PPP_PROT_REG_CB(on_get_libraries)
 PPP_PROT_REG_CB(on_free_osiproc)
 PPP_PROT_REG_CB(on_free_osiprocs)
 PPP_PROT_REG_CB(on_free_osimodules)
+PPP_PROT_REG_CB(on_process_start);
+PPP_PROT_REG_CB(on_process_end);
 
 PPP_CB_BOILERPLATE(on_get_processes)
 PPP_CB_BOILERPLATE(on_get_current_process)
@@ -43,6 +49,9 @@ PPP_CB_BOILERPLATE(on_get_libraries)
 PPP_CB_BOILERPLATE(on_free_osiproc)
 PPP_CB_BOILERPLATE(on_free_osiprocs)
 PPP_CB_BOILERPLATE(on_free_osimodules)
+PPP_CB_BOILERPLATE(on_process_start)
+PPP_CB_BOILERPLATE(on_process_end)
+
 
 // The copious use of pointers to pointers in this file is due to
 // the fact that PPP doesn't support return values (since it assumes
@@ -84,7 +93,26 @@ void free_osimodules(OsiModules *ms) {
     PPP_RUN_CB(on_free_osimodules, ms);
 }
 
+
+// NB: this isn't part of the api. 
+// this gets called when a process gets created
+void osi_process_start(CPUState *env, uint64_t pc, OsiProc *proc) {
+    PPP_RUN_CB(on_process_start, env, pc, proc);
+}
+
+// NB: also not part of the api.  
+// gets called when a process terminates
+void osi_process_end(CPUState *env, uint64_t pc, OsiProc *proc) {
+    PPP_RUN_CB(on_process_end, env, pc, proc);
+}
+
 bool init_plugin(void *self) {
+    // we want these to run when process is created / terminated
+
+    PPP_REG_CB("win7x86intro", on_win7x86_process_start, osi_process_start); 
+    PPP_REG_CB("win7x86intro", on_win7x86_process_end, osi_process_end); 
+    // TODO:  add same for other operating systems (linux x86, linux arm)
+
     return true;
 }
 
