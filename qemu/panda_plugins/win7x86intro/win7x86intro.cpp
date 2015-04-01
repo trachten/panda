@@ -29,6 +29,8 @@ extern "C" {
 #include "../osi/osi_types.h"
 #include "../osi/os_intro.h"
 
+#include "../osi/osi_ext.h"
+
 #include "../syscalls2/gen_syscalls_ext_typedefs_windows7_x86.h"
 
 #include "win7x86intro.h"
@@ -371,26 +373,28 @@ void on_free_osimodules(OsiModules *ms) {
 
 
 
-// called on *returning* from NtCreateUserProcess
-void on_nt_create_process (
-    CPUState* env,target_ulong pc,
-    uint32_t ProcessHandle,
-    uint32_t ThreadHandle,
-    uint32_t ProcessDesiredAccess,
-    uint32_t ThreadDesiredAccess,
-    uint32_t ProcessObjectAttributes,
-    uint32_t ThreadObjectAttributes,
-    uint32_t ProcessFlags,
-    uint32_t ThreadFlags,
-    uint32_t ProcessParameters,
-    uint32_t CreateInfo,
-    uint32_t AttributeList) {
-
+// called on return from NtCreateUserProcess
+void on_nt_create_user_process(
+        CPUState* env,
+        target_ulong pc,
+        uint32_t ProcessHandle,
+        uint32_t ThreadHandle,
+        uint32_t ProcessDesiredAccess,
+        uint32_t ThreadDesiredAccess,
+        uint32_t ProcessObjectAttributes,
+        uint32_t ThreadObjectAttributes,
+        uint32_t ProcessFlags,
+        uint32_t ThreadFlags,
+        uint32_t ProcessParameters,
+        uint32_t CreateInfo,
+        uint32_t AttributeList) {
     OsiProc *proc = (OsiProc *) calloc (1, sizeof(OsiProc));
     proc->name = (char *) "foo" ;
     proc->pid = 123 ;
-    // call the fn registered via osi that we want to run when a process is created
-    PPP_RUN_CB(on_win7x86_process_start, env, (uint64_t) pc, proc);
+    // notify osi that process has been created so it
+    // can run os-indepedent callbacks
+    osi_notify_process_start(env, pc, proc);
+    printf ("a process was created\n");
     free(proc);
 }
 
@@ -405,7 +409,9 @@ void on_nt_terminate_process (
     proc->name = (char *) "foo" ;
     proc->pid = 123 ;
     // call the fn registered via osi that we want to run when a process is created
-    PPP_RUN_CB(on_win7x86_process_end, env, (uint64_t)  pc, proc);
+    osi_notify_process_stop(env, pc, proc);
+
+    printf ("a process terminated\n");
     free(proc);
 }
 
@@ -420,8 +426,12 @@ bool init_plugin(void *self) {
     PPP_REG_CB("osi", on_free_osiproc, on_free_osiproc);
     PPP_REG_CB("osi", on_free_osiprocs, on_free_osiprocs);
     PPP_REG_CB("osi", on_free_osimodules, on_free_osimodules);
-    PPP_REG_CB("syscalls2", on_NtCreateUserProcess_return, on_nt_create_process);
+    PPP_REG_CB("syscalls2", on_NtCreateUserProcess_return, on_nt_create_user_process);
     PPP_REG_CB("syscalls2", on_NtTerminateProcess_enter, on_nt_terminate_process);
+    
+    assert(init_osi_api());
+
+
 #endif
     return true;
 }

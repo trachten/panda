@@ -21,5 +21,9 @@ void free_osiproc(OsiProc *p);
 void free_osiprocs(OsiProcs *ps);
 void free_osimodules(OsiModules *ms);
 
+void osi_notify_process_start(CPUState *env, uint64_t pc, OsiProc *proc);
+
+void osi_notify_process_stop(CPUState *env, uint64_t pc, OsiProc *proc);
+
 
 #endif

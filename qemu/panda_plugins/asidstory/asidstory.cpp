@@ -102,7 +102,7 @@ void vol(char *outfilename) {
 }
  
 #define SAMPLE_CUTOFF 10    
-#define SAMPLE_RATE 1
+#define SAMPLE_RATE 1000
 #define MILLION 1000000
 
 uint64_t a_counter = 0;
@@ -316,7 +316,7 @@ void asidstory_on_process_start(CPUState *env, target_ulong pc, OsiProc *proc) {
 }
 
 // and this one will be called when a process is terminated
-void asidstory_on_process_end(CPUState *env, target_ulong pc, OsiProc *proc) {
+void asidstory_on_process_stop(CPUState *env, target_ulong pc, OsiProc *proc) {
     printf ("process end name=[%s] pid=%d \n", proc->name, (int) proc->pid);    
 }
     
@@ -345,7 +345,7 @@ bool init_plugin(void *self) {
     
     // register the new / term process callbacks with osi
     PPP_REG_CB("osi", on_process_start, asidstory_on_process_start);
-    PPP_REG_CB("osi", on_process_end, asidstory_on_process_end);
+    PPP_REG_CB("osi", on_process_stop, asidstory_on_process_stop);
     
     min_instr = 0;   
     return true;
