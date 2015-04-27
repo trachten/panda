@@ -42,3 +42,5 @@ win7proc
 ida_taint
 tainted_instr
 pmemaccess
+tcn
+starcraft
