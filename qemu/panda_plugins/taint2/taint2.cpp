@@ -50,12 +50,17 @@ extern "C" {
 
 #include "../callstack_instr/callstack_instr_ext.h"
 
+#define TAINT_LEGACY_HYPERCALL // for use with replays that use old hypercall
+
 extern int loglevel;
 
 // For the C API to taint accessible from other plugins
 void taint2_enable_taint(void);
 int taint2_enabled(void);
 void taint2_label_ram(uint64_t pa, uint32_t l) ;
+void taint2_add_taint_ram_pos(CPUState *env, uint64_t addr, uint32_t length);
+void taint2_add_taint_ram_single_label(CPUState *env, uint64_t addr,
+    uint32_t length, long label);
 void taint2_delete_ram(uint64_t pa);
 
    
@@ -129,7 +134,7 @@ int phys_mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr,
 int phys_mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr,
         target_ulong size, void *buf);
 
-void taint_state_changed(FastShad *, uint64_t);
+void taint_state_changed(FastShad *, uint64_t, uint64_t);
 PPP_PROT_REG_CB(on_taint_change);
 PPP_CB_BOILERPLATE(on_taint_change);
 
@@ -536,6 +541,59 @@ void lava_attack_point(PandaHypercallStruct phs) {
 void i386_hypercall_callback(CPUState *env){
     if (pandalog) {
         // LAVA Hypercall
+#ifdef TAINT_LEGACY_HYPERCALL
+        target_ulong buf_start = EBX;
+        target_ulong buf_len = ECX;
+        long label = EDI;
+
+        // call to label data
+        // EBX contains addr of that data
+        // ECX contains size of data
+        // EDI is the label integer
+        // EDX = starting offset (for positional labels only)
+        //     -mostly not used, this is managed in pirate_utils
+        if (EAX == 7 || EAX == 8){
+            if (!taintEnabled){
+                printf("Taint plugin: Label operation detected\n");
+                printf("Enabling taint processing\n");
+                __taint2_enable_taint();
+            }
+            if (EAX == 7){
+                // Standard buffer label
+                printf("taint2: single taint label\n");
+                taint2_add_taint_ram_single_label(env, (uint64_t)buf_start,
+                    (int)buf_len, label);
+            }
+            else if (EAX == 8){
+                // Positional buffer label
+                printf("taint2: positional taint label\n");
+                taint2_add_taint_ram_pos(env, (uint64_t)buf_start, (int)buf_len);
+            }
+        }
+
+        /*
+        //mz Query taint on this buffer
+        //mz EBX = start of buffer (VA)
+        //mz ECX = size of buffer (bytes)
+        // EDX = starting offset - for file queries
+        //    -mostly not used, this is managed in pirate_utils
+        else if (env->regs[R_EAX] == 9){ //Query taint on label
+            if (taintEnabled){
+                printf("Taint plugin: Query operation detected\n");
+                Addr a = make_maddr(buf_start);
+                bufplot(env, shadow, &a, (int)buf_len);
+            }
+            //printf("Disabling taint processing\n");
+            //taintEnabled = false;
+            //taintJustDisabled = true;
+            //printf("Label occurrences on HD: %d\n", shad_dir_occ_64(shadow->hd));
+        }
+        else if (env->regs[R_EAX] == 10){
+            // Guest util done - reset positional label counter
+            taint_pos_count = 0;
+        }
+        */
+#else
         target_ulong addr = panda_virt_to_phys(env, EAX);
         if ((int)addr == -1) {
             printf ("panda hypercall with ptr to invalid PandaHypercallStruct: vaddr=0x%x paddr=0x%x\n",
@@ -561,6 +619,7 @@ void i386_hypercall_callback(CPUState *env){
                 printf ("Invalid magic value in PHS struct: %x != 0xabcd.\n", phs.magic);
             }
         }
+#endif // TAINT_LEGACY_HYPERCALL
     }
 }
 #endif // TARGET_I386
@@ -578,7 +637,7 @@ int guest_hypercall_callback(CPUState *env){
 }
 
 // Called whenever the taint state changes.
-void taint_state_changed(FastShad *fast_shad, uint64_t shad_addr) {
+void taint_state_changed(FastShad *fast_shad, uint64_t shad_addr, uint64_t size) {
     Addr addr;
     if (fast_shad == shadow->llv) {
         addr = make_laddr(shad_addr / MAXREGSIZE, shad_addr % MAXREGSIZE);
@@ -598,7 +657,7 @@ void taint_state_changed(FastShad *fast_shad, uint64_t shad_addr) {
         addr.flag = (AddrFlag)0;
     } else return;
 
-    PPP_RUN_CB(on_taint_change, addr);
+    PPP_RUN_CB(on_taint_change, addr, size);
 }
 
 bool __taint2_enabled() {
@@ -610,8 +669,54 @@ void __taint2_label_ram(uint64_t pa, uint32_t l) {
     tp_label_ram(shadow, pa, l);
 }
 
+uint32_t taint_pos_count = 0;
 
+void label_byte(CPUState *env, target_ulong virt_addr, uint32_t label_num) {
+    target_phys_addr_t pa = panda_virt_to_phys(env, virt_addr);
+    if (pandalog) {
+        Panda__LogEntry ple = PANDA__LOG_ENTRY__INIT;
+        ple.has_taint_label_virtual_addr = 1;
+        ple.has_taint_label_physical_addr = 1;
+        ple.has_taint_label_number = 1;
+        ple.taint_label_virtual_addr = virt_addr;
+        ple.taint_label_physical_addr = pa;
+        ple.taint_label_number = label_num;
+        pandalog_write_entry(&ple);
+    }
+    taint2_label_ram(pa, label_num);
+}
 
+// Apply positional taint to a buffer of memory
+void taint2_add_taint_ram_pos(CPUState *env, uint64_t addr, uint32_t length){
+    for (unsigned i = 0; i < length; i++){
+        target_phys_addr_t pa = cpu_get_phys_addr(env, addr + i);
+        if (pa == (target_phys_addr_t)(-1)) {
+            printf("can't label addr=0x%lx: mmu hasn't mapped virt->phys, "
+                "i.e., it isnt actually there.\n", addr +i);
+            continue;
+        }
+        //taint2_label_ram(pa, i + taint_pos_count);
+        printf("taint2: adding positional taint label %d\n", i+taint_pos_count);
+        label_byte(env, addr+i, i+taint_pos_count);
+    }
+    taint_pos_count += length;
+}
+
+// Apply single label taint to a buffer of memory
+void taint2_add_taint_ram_single_label(CPUState *env, uint64_t addr,
+        uint32_t length, long label){
+    for (unsigned i = 0; i < length; i++){
+        target_phys_addr_t pa = cpu_get_phys_addr(env, addr + i);
+        if (pa == (target_phys_addr_t)(-1)) {
+            printf("can't label addr=0x%lx: mmu hasn't mapped virt->phys, "
+                "i.e., it isnt actually there.\n", addr +i);
+            continue;
+        }
+        //taint2_label_ram(pa, label);
+        printf("taint2: adding single taint label %lu\n", label);
+        label_byte(env, addr+i, label);
+    }
+}
 
 uint32_t __taint2_query(Addr a) {
     LabelSetP ls = tp_query(shadow, a);

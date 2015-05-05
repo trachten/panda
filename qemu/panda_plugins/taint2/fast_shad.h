@@ -29,7 +29,7 @@ extern "C" {
 
 extern bool track_taint_state;
 
-extern void taint_state_changed(FastShad *fast_shad, uint64_t addr);
+extern void taint_state_changed(FastShad *fast_shad, uint64_t addr, uint64_t size);
 }
 
 #define CPU_LOG_TAINT_OPS (1 << 14)
@@ -53,6 +53,10 @@ struct TaintData {
     TaintData() : ls(NULL), tcn(0) {}
     TaintData(LabelSetP ls) : ls(ls), tcn(0) {}
     TaintData(LabelSetP ls, uint32_t tcn) : ls(ls), tcn(ls ? tcn : 0) {}
+
+    bool operator==(const TaintData &other) const {
+        return ls == other.ls && tcn == other.tcn;
+    }
 
     void add(TaintData td) {
         ls = label_set_union(ls, td.ls);
@@ -85,8 +89,8 @@ private:
     }
 
     inline bool range_tainted(uint64_t addr, uint64_t size) {
-        for (unsigned i = addr; i < size; i++) {
-            if (get_td_p(addr)->ls) return true;
+        for (unsigned i = addr; i < addr+size; i++) {
+            if (get_td_p(i)->ls) return true;
         }
         return false;
     }
@@ -127,7 +131,7 @@ public:
 
         memcpy(shad_dest->get_td_p(dest), shad_src->get_td_p(src), size * sizeof(TaintData));
 
-        if (change) taint_state_changed(shad_dest, dest);
+        if (change) taint_state_changed(shad_dest, dest, size);
     }
 
     // Remove taint.
@@ -149,7 +153,7 @@ public:
             change = true;
         memset(get_td_p(addr), 0, remove_size * sizeof(TaintData));
 
-        if (change) taint_state_changed(this, addr);
+        if (change) taint_state_changed(this, addr, remove_size);
     }
 
     // Query. NULL if untainted.
@@ -181,12 +185,10 @@ public:
     inline void set_full(uint64_t addr, TaintData td) {
         tassert(addr < size);
 
-        bool change = false;
-        if (td.ls != get_td_p(addr)->ls)
-            change = true;
+        bool change = !(td == *get_td_p(addr));
         labels[addr] = td;
 
-        if (change) taint_state_changed(this, addr);
+        if (change) taint_state_changed(this, addr, 1);
     }
 
     inline uint32_t query_tcn(uint64_t addr) {
