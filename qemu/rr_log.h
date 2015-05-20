@@ -45,8 +45,6 @@ void rr_record_cpu_mem_rw_call(RR_callsite_id call_site, target_phys_addr_t addr
 void rr_record_cpu_reg_io_mem_region(RR_callsite_id call_site, target_phys_addr_t start_addr, ram_addr_t size, ram_addr_t phys_offset);
 void rr_record_cpu_mem_unmap(RR_callsite_id call_site, target_phys_addr_t addr, uint8_t *buf, target_phys_addr_t len, int is_write);
 
-void panda_cleanup(void);
-
 static inline void rr_cpu_physical_memory_unmap_record(target_phys_addr_t addr, uint8_t *buf, target_phys_addr_t len, int is_write) {
   rr_record_cpu_mem_unmap((RR_callsite_id) rr_skipped_callsite_location, addr, buf, len, is_write);
 }
