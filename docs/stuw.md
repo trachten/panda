@@ -1,0 +1,1 @@
+STUW aims to give an overview of interprocess communication for system calls. It relies on data collected by win7proc output into a pandalog. This pandalog is then read in by stuw.cpp which outputs a text adjancency matrix.
